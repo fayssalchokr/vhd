@@ -60,3 +60,64 @@ int main(int argc, char** argv)
 
             return rooted_path.string();
         };
+        auto directory = args.get_or("directory", "");
+        if (!directory.empty()) {
+            auto path_to_root = std::filesystem::path(directory);
+
+            for (auto& file : std::filesystem::recursive_directory_iterator(path_to_root)) {
+                auto path_on_disk_image = path_rooted_at(directory, file.path().string());
+                obj.path = path_on_disk_image;
+
+                Logger::the().info("storing file ", file.path().string());
+
+                if (file.is_directory()) {
+                    obj.type = FSObject::Type::DIRECTORY;
+                    fs->store(obj);
+                    continue;
+                }
+
+                if (file.is_regular_file()) {
+                    obj.type = FSObject::Type::FILE;
+                    obj.data = read_entire(file.path().string());
+                    fs->store(obj);
+                    continue;
+                }
+
+                Logger::the().warning("Not going to store unknown file type at ", file.path().string());
+            }
+        }
+
+        obj.type = FSObject::Type::FILE;
+
+        for (const auto& file : args.get_list_or("files", {})) {
+            auto path_on_disk = "/" + std::filesystem::path(file).filename().string();
+            obj.path = path_on_disk;
+
+            Logger::the().info("storing file ", file);
+
+            obj.data = read_entire(file);
+            fs->store(obj);
+        }
+
+        for (auto& arg : args.get_list_or("store", {})) {
+            auto comma = arg.find(',');
+
+            if (comma == std::string::npos)
+                throw std::runtime_error("invalid store argument format: " + arg);
+
+            std::string file_path(arg.data(), comma);
+
+            auto sector = atoll(arg.data() + comma + 1);
+            if (sector <= 0 || sector >= image->geometry().total_sector_count)
+                throw std::runtime_error("invalid sector value " + std::to_string(sector));
+
+            auto entire_file = read_entire(file_path);
+            image->write_at(entire_file.data(), entire_file.size(), sector * DiskImage::sector_size);
+        }
+    } catch (const std::exception& ex) {
+        Logger::the().error(ex.what());
+        return 1;
+    }
+
+    return 0;
+}
