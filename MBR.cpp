@@ -48,3 +48,10 @@ void MBR::Partition::serialize(uint8_t* into, const DiskGeometry& geometry, size
         into[6] = 0xFF;
         into[7] = 0xFF;
     }
+
+    into[0] = static_cast<uint8_t>(m_status);
+    into[4] = static_cast<uint8_t>(m_type);
+
+    memcpy(&into[8], &lba_offset, sizeof(uint32_t));
+    memcpy(&into[12], &m_sector_count, sizeof(uint32_t));
+}
